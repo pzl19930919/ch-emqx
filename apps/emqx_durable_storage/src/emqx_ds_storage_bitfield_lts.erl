@@ -33,7 +33,9 @@
     make_iterator/5,
     update_iterator/4,
     next/4,
-    post_creation_actions/1
+    post_creation_actions/1,
+    iterator_info_extractor/0,
+    extract_iterator_info/1
 ]).
 
 %% internal exports:
@@ -357,6 +359,19 @@ next_until(#s{db = DB, data = CF, keymappers = Keymappers}, It, SafeCutoffTime, 
         rocksdb:iterator_close(ITHandle),
         erase(?COUNTER)
     end.
+
+-spec iterator_info_extractor() -> emqx_ds:iterator_info_extractor().
+iterator_info_extractor() ->
+    {?MODULE, extract_iterator_info, []}.
+
+-spec extract_iterator_info(iterator()) -> emqx_ds:iterator_info_res().
+extract_iterator_info(#{?tag := ?IT, ?last_seen_key := LastSeenKey0, ?topic_filter := TopicFilter}) ->
+    LastSeenKey =
+        case LastSeenKey0 of
+            <<>> -> undefined;
+            _ -> LastSeenKey0
+        end,
+    #{last_seen_key => LastSeenKey, topic_filter => TopicFilter}.
 
 %%================================================================================
 %% Internal functions

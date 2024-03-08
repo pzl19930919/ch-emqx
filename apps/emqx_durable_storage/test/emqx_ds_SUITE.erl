@@ -372,6 +372,57 @@ t_10_non_atomic_store_batch(_Config) ->
     ),
     ok.
 
+%% Verifies the basic usage of `iterator_info_extractor/0' callback.
+%%   1) If the callback module implements `iterator_info_extractor/0', it returns a
+%%      function that, given an iterator managed by it, returns the (binary) last key seen by
+%%      such iterator, or `undefined' if it has never been used, and the topic filter.
+%%   2) If the callback module does not implement `iterator_info_extractor/0', it returns
+%%      `undefined'.
+t_11_iterator_info_extractor(_Config) ->
+    DB = ?FUNCTION_NAME,
+    ?check_trace(
+        begin
+            ?assertMatch(ok, emqx_ds:open_db(DB, opts())),
+
+            TopicFilter = emqx_topic:words(<<"foo/+">>),
+            StartTime = 0,
+            Msgs = [
+                message(<<"foo/bar">>, <<"1">>, 0),
+                message(<<"foo/baz">>, <<"2">>, 1)
+            ],
+            ?assertMatch(ok, emqx_ds:store_batch(DB, Msgs)),
+
+            [{_, Stream}] = emqx_ds:get_streams(DB, TopicFilter, StartTime),
+
+            Res0 = emqx_ds_replication_layer:iterator_info_extractor(DB, Stream),
+            ?assertMatch({ok, _}, Res0),
+            {ok, ExtractorFn} = Res0,
+
+            {ok, Iter0} = emqx_ds:make_iterator(DB, Stream, TopicFilter, StartTime),
+
+            ?assertEqual(
+                #{last_seen_key => undefined, topic_filter => TopicFilter},
+                emqx_ds_replication_layer:extract_iterator_info(Iter0, ExtractorFn)
+            ),
+
+            {ok, Iter1, [{DSKey1, _Msg1}]} = emqx_ds:next(DB, Iter0, 1),
+            ?assertEqual(
+                #{last_seen_key => DSKey1, topic_filter => TopicFilter},
+                emqx_ds_replication_layer:extract_iterator_info(Iter1, ExtractorFn)
+            ),
+
+            {ok, Iter2, [{DSKey2, _Msg2}]} = emqx_ds:next(DB, Iter0, 1),
+            ?assertEqual(
+                #{last_seen_key => DSKey2, topic_filter => TopicFilter},
+                emqx_ds_replication_layer:extract_iterator_info(Iter2, ExtractorFn)
+            ),
+
+            ok
+        end,
+        []
+    ),
+    ok.
+
 t_drop_generation_with_never_used_iterator(_Config) ->
     %% This test checks how the iterator behaves when:
     %%   1) it's created at generation 1 and not consumed from.

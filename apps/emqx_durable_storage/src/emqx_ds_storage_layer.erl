@@ -32,6 +32,9 @@
     drop_generation/2
 ]).
 
+%% API:
+-export([iterator_info_extractor/2, extract_iterator_info/2]).
+
 %% gen_server
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -190,7 +193,36 @@
 
 -callback post_creation_actions(post_creation_context()) -> _Data.
 
--optional_callbacks([post_creation_actions/1]).
+-callback iterator_info_extractor() -> emqx_ds:iterator_info_extractor().
+
+-optional_callbacks([post_creation_actions/1, iterator_info_extractor/0]).
+
+%%================================================================================
+%% API
+%%================================================================================
+
+-spec iterator_info_extractor(shard_id(), stream()) ->
+    undefined | {ok, emqx_ds:iterator_info_extractor()}.
+iterator_info_extractor(Shard, ?stream_v2(GenId, _)) ->
+    case generation_get_safe(Shard, GenId) of
+        {ok, #{module := Mod}} ->
+            case erlang:function_exported(Mod, iterator_info_extractor, 0) of
+                true ->
+                    ExtractorFn = Mod:iterator_info_extractor(),
+                    {ok, {?MODULE, extract_iterator_info, [ExtractorFn]}};
+                false ->
+                    undefined
+            end;
+        {error, not_found} ->
+            undefined
+    end.
+
+-spec extract_iterator_info(iterator(), emqx_ds:iterator_info_extractor()) ->
+    emqx_ds:iterator_info_res().
+extract_iterator_info(Iter, ExtractorFn) ->
+    #{?tag := ?IT, ?enc := LayoutIter} = Iter,
+    {Mod, FnName, LayoutArgs} = ExtractorFn,
+    apply(Mod, FnName, [LayoutIter | LayoutArgs]).
 
 %%================================================================================
 %% API for the replication layer

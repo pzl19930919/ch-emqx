@@ -1,5 +1,5 @@
 %%--------------------------------------------------------------------
-%% Copyright (c) 2022, 2024 EMQ Technologies Co., Ltd. All Rights Reserved.
+%% Copyright (c) 2024 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -13,22 +13,16 @@
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
 %%--------------------------------------------------------------------
--ifndef(EMQX_DS_REPLICATION_LAYER_HRL).
--define(EMQX_DS_REPLICATION_LAYER_HRL, true).
+-ifndef(EMQX_DS_CACHE_HRL).
+-define(EMQX_DS_CACHE_HRL, true).
 
-%% # "Record" integer keys.  We use maps with integer keys to avoid persisting and sending
-%% records over the wire.
+-define(EOS_MARKER, []).
 
-%% tags:
--define(STREAM, 1).
--define(IT, 2).
--define(BATCH, 3).
+-record(cache_entry, {
+    key :: emqx_ds:message_key(),
+    seqno :: seqno(),
+    message :: emqx_types:message() | ?EOS_MARKER
+}).
 
-%% keys:
--define(tag, 1).
--define(shard, 2).
--define(enc, 3).
--define(batch_messages, 2).
--define(stream, 4).
-
+%% ifndef(EMQX_DS_CACHE_HRL).
 -endif.

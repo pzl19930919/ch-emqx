@@ -32,13 +32,15 @@
     get_streams/3,
     make_iterator/4,
     update_iterator/3,
-    next/3,
+    next/3, next/4,
+    iterator_info_extractor/2,
+    extract_iterator_info/2,
     node_of_shard/2,
     shard_of_message/3,
     maybe_set_myself_as_leader/2
 ]).
 
-%% internal exports:
+%% internal exports (RPC targets):
 -export([
     do_drop_db_v1/1,
     do_store_batch_v1/4,
@@ -50,11 +52,18 @@
     do_next_v1/4,
     do_add_generation_v2/1,
     do_list_generations_with_lifetimes_v3/2,
-    do_drop_generation_v3/3
+    do_drop_generation_v3/3,
+    do_iterator_info_extractor_v4/3
 ]).
 
 -export_type([
-    shard_id/0, builtin_db_opts/0, stream_v1/0, stream/0, iterator/0, message_id/0, batch/0
+    shard_id/0,
+    builtin_db_opts/0,
+    stream/0,
+    stream_v1/0,
+    iterator/0,
+    message_id/0,
+    batch/0
 ]).
 
 -include_lib("emqx_utils/include/emqx_message.hrl").
@@ -71,7 +80,8 @@
         backend := builtin,
         storage := emqx_ds_storage_layer:prototype(),
         n_shards => pos_integer(),
-        replication_factor => pos_integer()
+        replication_factor => pos_integer(),
+        cache_prefetch_topic_filters => [emqx_ds:topic_filter()]
     }.
 
 %% This enapsulates the stream entity from the replication level.
@@ -92,7 +102,7 @@
 -opaque iterator() ::
     #{
         ?tag := ?IT,
-        ?shard := emqx_ds_replication_layer:shard_id(),
+        ?stream := stream(),
         ?enc := emqx_ds_storage_layer:iterator()
     }.
 
@@ -200,7 +210,7 @@ make_iterator(DB, Stream, TopicFilter, StartTime) ->
     Node = node_of_shard(DB, Shard),
     case emqx_ds_proto_v4:make_iterator(Node, DB, Shard, StorageStream, TopicFilter, StartTime) of
         {ok, Iter} ->
-            {ok, #{?tag => ?IT, ?shard => Shard, ?enc => Iter}};
+            {ok, #{?tag => ?IT, ?stream => Stream, ?enc => Iter}};
         Err = {error, _} ->
             Err
     end.
@@ -212,7 +222,7 @@ make_iterator(DB, Stream, TopicFilter, StartTime) ->
 ) ->
     emqx_ds:make_iterator_result(iterator()).
 update_iterator(DB, OldIter, DSKey) ->
-    #{?tag := ?IT, ?shard := Shard, ?enc := StorageIter} = OldIter,
+    #{?tag := ?IT, ?stream := ?stream_v2(Shard, _), ?enc := StorageIter} = OldIter,
     Node = node_of_shard(DB, Shard),
     case
         emqx_ds_proto_v4:update_iterator(
@@ -224,14 +234,38 @@ update_iterator(DB, OldIter, DSKey) ->
         )
     of
         {ok, Iter} ->
-            {ok, #{?tag => ?IT, ?shard => Shard, ?enc => Iter}};
+            {ok, OldIter#{?enc := Iter}};
         Err = {error, _} ->
             Err
     end.
 
 -spec next(emqx_ds:db(), iterator(), pos_integer()) -> emqx_ds:next_result(iterator()).
 next(DB, Iter0, BatchSize) ->
-    #{?tag := ?IT, ?shard := Shard, ?enc := StorageIter0} = Iter0,
+    CacheEnabled = emqx_ds_cache_coordinator:is_cache_enabled(),
+    next(DB, Iter0, BatchSize, _Opts = #{use_cache => CacheEnabled}).
+
+-spec next(emqx_ds:db(), iterator(), pos_integer(), emqx_ds:next_opts()) ->
+    emqx_ds:next_result(iterator()).
+next(DB, Iter0, BatchSize, _Opts = #{use_cache := true}) ->
+    #{?tag := ?IT, ?stream := Stream} = Iter0,
+    case emqx_ds_cache_coordinator:try_fetch_cache(DB, Stream, Iter0, BatchSize) of
+        false ->
+            do_next(DB, Iter0, BatchSize);
+        {ok, end_of_stream} ->
+            {ok, end_of_stream};
+        {ok, LastSeenKey, Batch} ->
+            case update_iterator(DB, Iter0, LastSeenKey) of
+                {ok, Iter} ->
+                    {ok, Iter, Batch};
+                Error = {error, _} ->
+                    Error
+            end
+    end;
+next(DB, Iter0, BatchSize, _Opts) ->
+    do_next(DB, Iter0, BatchSize).
+
+do_next(DB, Iter0, BatchSize) ->
+    #{?tag := ?IT, ?stream := ?stream_v2(Shard, _), ?enc := StorageIter0} = Iter0,
     Node = node_of_shard(DB, Shard),
     %% TODO: iterator can contain information that is useful for
     %% reconstructing messages sent over the network. For example,
@@ -248,6 +282,20 @@ next(DB, Iter0, BatchSize) ->
         Other ->
             Other
     end.
+
+-spec iterator_info_extractor(emqx_ds:db(), emqx_ds:ds_specific_stream()) ->
+    undefined | {ok, emqx_ds:iterator_info_extractor()}.
+iterator_info_extractor(DB, Stream) ->
+    ?stream_v2(Shard, StorageStream) = Stream,
+    Node = node_of_shard(DB, Shard),
+    emqx_ds_proto_v4:iterator_info_extractor(Node, DB, Shard, StorageStream).
+
+-spec extract_iterator_info(iterator(), emqx_ds:iterator_info_extractor()) ->
+    emqx_ds:iterator_info_res().
+extract_iterator_info(Iter, ExtractorFn) ->
+    #{?tag := ?IT, ?enc := StorageIter} = Iter,
+    {Mod, FnName, StorageArgs} = ExtractorFn,
+    apply(Mod, FnName, [StorageIter | StorageArgs]).
 
 -spec node_of_shard(emqx_ds:db(), shard_id()) -> node().
 node_of_shard(DB, Shard) ->
@@ -393,6 +441,11 @@ do_list_generations_with_lifetimes_v3(DB, ShardId) ->
     ok | {error, _}.
 do_drop_generation_v3(DB, ShardId, GenId) ->
     emqx_ds_storage_layer:drop_generation({DB, ShardId}, GenId).
+
+-spec do_iterator_info_extractor_v4(emqx_ds:db(), shard_id(), emqx_ds_storage_layer:stream()) ->
+    undefined | {ok, emqx_ds:iterator_info_extractor()}.
+do_iterator_info_extractor_v4(DB, ShardId, StorageStream) ->
+    emqx_ds_storage_layer:iterator_info_extractor({DB, ShardId}, StorageStream).
 
 %%================================================================================
 %% Internal functions

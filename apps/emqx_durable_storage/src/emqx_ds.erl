@@ -36,7 +36,14 @@
 -export([store_batch/2, store_batch/3]).
 
 %% Message replay API:
--export([get_streams/3, make_iterator/4, update_iterator/3, next/3]).
+-export([
+    get_streams/3,
+    make_iterator/4,
+    update_iterator/3,
+    next/3, next/4,
+    iterator_info_extractor/2,
+    extract_iterator_info/3
+]).
 
 %% Message delete API:
 -export([get_delete_streams/3, make_delete_iterator/4, delete_next/4]).
@@ -48,7 +55,6 @@
     create_db_opts/0,
     db/0,
     time/0,
-    topic_filter/0,
     topic/0,
     stream/0,
     delete_stream/0,
@@ -64,9 +70,12 @@
     message_store_opts/0,
     next_result/1, next_result/0,
     delete_next_result/1, delete_next_result/0,
+    next_opts/0,
     store_batch_result/0,
     make_iterator_result/1, make_iterator_result/0,
     make_delete_iterator_result/1, make_delete_iterator_result/0,
+    iterator_info_extractor/0,
+    iterator_info_res/0,
 
     ds_specific_stream/0,
     ds_specific_iterator/0,
@@ -76,6 +85,8 @@
     generation_rank/0,
     generation_info/0
 ]).
+
+-include_lib("typerefl/include/types.hrl").
 
 %%================================================================================
 %% Type declarations
@@ -189,6 +200,19 @@
 
 -define(module(DB), (persistent_term:get(?persistent_term(DB)))).
 
+-type iterator_info_extractor() :: {module(), atom(), [term()]}.
+
+-type iterator_info_res() :: #{
+    last_seen_key := undefined | message_key(),
+    topic_filter := topic_filter()
+}.
+
+-type next_opts() :: #{use_cache => boolean()}.
+
+-export([to_topic_filter/1]).
+-typerefl_from_string({topic_filter/0, emqx_ds, to_topic_filter}).
+-reflect_type([topic_filter/0]).
+
 %%================================================================================
 %% Behavior callbacks
 %%================================================================================
@@ -228,9 +252,18 @@
 
 -callback count(db()) -> non_neg_integer().
 
+-callback iterator_info_extractor(db(), ds_specific_stream()) ->
+    undefined | {ok, iterator_info_extractor()}.
+
+-callback extract_iterator_info(ds_specific_iterator(), iterator_info_extractor()) ->
+    iterator_info_res().
+
 -optional_callbacks([
     list_generations_with_lifetimes/1,
     drop_generation/2,
+
+    iterator_info_extractor/2,
+    extract_iterator_info/2,
 
     get_delete_streams/3,
     make_delete_iterator/4,
@@ -360,6 +393,10 @@ update_iterator(DB, OldIter, DSKey) ->
 next(DB, Iter, BatchSize) ->
     ?module(DB):next(DB, Iter, BatchSize).
 
+-spec next(db(), iterator(), pos_integer(), next_opts()) -> next_result().
+next(DB, Iter, BatchSize, Opts) ->
+    ?module(DB):next(DB, Iter, BatchSize, Opts).
+
 -spec get_delete_streams(db(), topic_filter(), time()) -> [delete_stream()].
 get_delete_streams(DB, TopicFilter, StartTime) ->
     Mod = ?module(DB),
@@ -386,9 +423,29 @@ count(DB) ->
     Mod = ?module(DB),
     call_if_implemented(Mod, count, [DB], {error, not_implemented}).
 
+-spec iterator_info_extractor(db(), stream()) -> undefined | {ok, iterator_info_extractor()}.
+iterator_info_extractor(DB, Stream) ->
+    Mod = ?module(DB),
+    call_if_implemented(Mod, iterator_info_extractor, [DB, Stream], undefined).
+
+-spec extract_iterator_info(db(), iterator(), iterator_info_extractor()) ->
+    iterator_info_res().
+extract_iterator_info(DB, Iter, ExtractorFn) ->
+    ?module(DB):extract_iterator_info(Iter, ExtractorFn).
+
 %%================================================================================
 %% Internal exports
 %%================================================================================
+
+to_topic_filter(TopicStr) ->
+    TopicBin = unicode:characters_to_binary(TopicStr),
+    try
+        emqx_topic:validate(filter, TopicBin),
+        {ok, emqx_topic:words(TopicBin)}
+    catch
+        error:Reason ->
+            {error, Reason}
+    end.
 
 %%================================================================================
 %% Internal functions
