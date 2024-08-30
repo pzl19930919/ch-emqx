@@ -215,7 +215,11 @@ info(timers, #channel{timers = Timers}) ->
 info(session_state, #channel{session = Session}) ->
     Session;
 info(impl, #channel{session = Session}) ->
-    emqx_session:info(impl, Session).
+    emqx_session:info(impl, Session);
+info(cid, #channel{clientinfo = ClientInfo}) ->
+    emqx_mtns:cid(ClientInfo);
+info(mtns, #channel{clientinfo = ClientInfo}) ->
+    emqx_mtns:get_mtns(ClientInfo).
 
 set_conn_state(ConnState, Channel) ->
     Channel#channel{conn_state = ConnState}.
@@ -1287,16 +1291,16 @@ handle_call(
     Channel = #channel{
         keepalive = KeepAlive,
         conninfo = ConnInfo,
-        clientinfo = #{zone := Zone}
+        clientinfo = #{zone := Zone, clientid := ClientId}
     }
 ) ->
-    ClientId = info(clientid, Channel),
+    Mtns = info(mtns, Channel),
     NKeepalive = emqx_keepalive:update(Zone, Interval, KeepAlive),
     NConnInfo = maps:put(keepalive, Interval, ConnInfo),
     NChannel = Channel#channel{keepalive = NKeepalive, conninfo = NConnInfo},
-    SockInfo = maps:get(sockinfo, emqx_cm:get_chan_info(ClientId), #{}),
+    SockInfo = maps:get(sockinfo, emqx_cm:get_chan_info(Mtns, ClientId), #{}),
     ChanInfo1 = info(NChannel),
-    emqx_cm:set_chan_info(ClientId, ChanInfo1#{sockinfo => SockInfo}),
+    emqx_cm:set_chan_info(Mtns, ClientId, ChanInfo1#{sockinfo => SockInfo}),
     reply(ok, reset_timer(keepalive, NChannel));
 handle_call({Type, _Meta} = MsgsReq, Channel = #channel{session = Session}) when
     Type =:= mqueue_msgs; Type =:= inflight_msgs
