@@ -295,6 +295,14 @@ rule_engine_settings() ->
                     deprecated => {since, "v5.0.22"},
                     importance => ?IMPORTANCE_HIDDEN
                 }
+            )},
+        {sql_actions_undefined_vars_as_null,
+            ?HOCON(
+                boolean(),
+                #{
+                    default => false,
+                    desc => ?DESC("rule_engine_sql_actions_undefined_vars_as_null")
+                }
             )}
     ].
 

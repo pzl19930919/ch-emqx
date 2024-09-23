@@ -495,7 +495,7 @@ render_row(RowTemplate, Data) ->
     % NOTE
     % Ignoring errors here, missing variables are set to "'undefined'" due to backward
     % compatibility requirements.
-    RenderOpts = #{escaping => mysql, undefined => <<"undefined">>},
+    RenderOpts = emqx_utils_sql:sqlstr_opts(#{escaping => mysql}),
     {Row, _Errors} = emqx_template_sql:render(RowTemplate, {emqx_jsonish, Data}, RenderOpts),
     Row.
 

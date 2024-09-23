@@ -154,6 +154,17 @@ rule_engine_jq_implementation_module.desc:
 rule_engine_jq_implementation_module.label:
 """JQ Implementation Module"""
 
+rule_engine_sql_actions_undefined_vars_as_null.desc:
+"""
+When writing to an SQL database, treat undefined variables as NULL.
+When this option is enabled, if undefined variables (like ${var}) are used in SQL database-related actions (MySQL, PgSQL, etc.), they will be replaced with "NULL" instead of the string "undefined" in the INSERT statement.
+If this option is not enabled (default), in some cases, the string "undefined" will be inserted into the database.
+This option should always be enabled; it is disabled by default only to ensure backward compatibility.
+"""
+
+rule_engine_sql_actions_undefined_vars_as_null.label:
+"""Undefined Vars as Null in SQL Actions"""
+
 rule_engine_rules.desc:
 """The rules"""
 

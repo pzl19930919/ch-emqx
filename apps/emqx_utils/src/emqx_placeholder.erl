@@ -252,15 +252,15 @@ bin(Val) -> emqx_utils_conv:bin(Val).
 
 -spec quote_sql(_Value) -> iolist().
 quote_sql(Str) ->
-    emqx_utils_sql:to_sql_string(Str, #{escaping => sql, undefined => <<"undefined">>}).
+    emqx_utils_sql:to_sql_string(Str, emqx_utils_sql:sqlstr_opts(#{escaping => sql})).
 
 -spec quote_cql(_Value) -> iolist().
 quote_cql(Str) ->
-    emqx_utils_sql:to_sql_string(Str, #{escaping => cql, undefined => <<"undefined">>}).
+    emqx_utils_sql:to_sql_string(Str, emqx_utils_sql:sqlstr_opts(#{escaping => cql})).
 
 -spec quote_mysql(_Value) -> iolist().
 quote_mysql(Str) ->
-    emqx_utils_sql:to_sql_string(Str, #{escaping => mysql, undefined => <<"undefined">>}).
+    emqx_utils_sql:to_sql_string(Str, emqx_utils_sql:sqlstr_opts(#{escaping => mysql})).
 
 lookup_var(Var, Value) when Var == ?PH_VAR_THIS orelse Var == [] ->
     Value;

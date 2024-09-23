@@ -21,6 +21,7 @@
 
 -export([to_sql_value/1]).
 -export([to_sql_string/2]).
+-export([sqlstr_opts/1]).
 
 -export([escape_sql/1]).
 -export([escape_cql/1]).
@@ -134,6 +135,23 @@ to_sql_string(Term, #{escaping := cql}) ->
     maybe_escape(Term, fun escape_cql/1);
 to_sql_string(Term, #{}) ->
     maybe_escape(Term, fun escape_sql/1).
+
+-spec sqlstr_opts(map()) -> map().
+sqlstr_opts(Opts) ->
+    case
+        emqx:get_config(
+            [
+                emqx_rule_engine_schema:namespace(),
+                sql_actions_undefined_vars_as_null
+            ],
+            false
+        )
+    of
+        false ->
+            Opts#{undefined => <<"undefined">>};
+        true ->
+            Opts
+    end.
 
 -spec maybe_escape(_Value, fun((binary()) -> iodata())) -> unicode:chardata().
 maybe_escape(Str, EscapeFun) when is_binary(Str) ->
