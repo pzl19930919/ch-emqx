@@ -138,19 +138,10 @@ to_sql_string(Term, #{}) ->
 
 -spec sqlstr_opts(map()) -> map().
 sqlstr_opts(Opts) ->
-    case
-        emqx:get_config(
-            [
-                emqx_rule_engine_schema:namespace(),
-                sql_actions_undefined_vars_as_null
-            ],
-            false
-        )
-    of
-        false ->
-            Opts#{undefined => <<"undefined">>};
-        true ->
-            Opts
+    Path = [emqx_rule_engine_schema:namespace(), db_actions_undefined_vars_as_null],
+    case emqx:get_config(Path, false) of
+        false -> Opts#{undefined => <<"undefined">>};
+        true -> Opts
     end.
 
 -spec maybe_escape(_Value, fun((binary()) -> iodata())) -> unicode:chardata().

@@ -401,7 +401,7 @@ get_templates(ChannId, State) ->
     end.
 
 get_sql(channel_message, #{send_message_template := PreparedSQL}, Data) ->
-    emqx_placeholder:proc_tmpl(PreparedSQL, Data, #{return => full_binary});
+    emqx_placeholder:proc_nullable_tmpl(PreparedSQL, Data);
 get_sql(_, _, SQL) ->
     SQL.
 
@@ -450,10 +450,10 @@ objects_to_sql(
     }
 ) ->
     %% Prepare INSERT-statement and the first row after VALUES
-    InsertStatementHead = emqx_placeholder:proc_tmpl(InsertTemplate, FirstObject),
+    InsertStatementHead = emqx_placeholder:proc_nullable_tmpl(InsertTemplate, FirstObject),
     FormatObjectDataFunction =
         fun(Object) ->
-            emqx_placeholder:proc_tmpl(BulkExtendInsertTemplate, Object)
+            emqx_placeholder:proc_nullable_tmpl(BulkExtendInsertTemplate, Object)
         end,
     InsertStatementTail = lists:map(FormatObjectDataFunction, RemainingObjects),
     CompleteStatement = erlang:iolist_to_binary([InsertStatementHead, InsertStatementTail]),

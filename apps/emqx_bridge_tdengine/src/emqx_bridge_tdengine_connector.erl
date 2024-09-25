@@ -189,7 +189,7 @@ on_stop(InstanceId, _State) ->
 on_query(InstanceId, {ChannelId, Data}, #{channels := Channels} = State) ->
     case maps:find(ChannelId, Channels) of
         {ok, #{insert := Tokens, opts := Opts}} ->
-            Query = emqx_placeholder:proc_tmpl(Tokens, Data),
+            Query = emqx_placeholder:proc_nullable_tmpl(Tokens, Data),
             emqx_trace:rendered_action_template(ChannelId, #{query => Query}),
             do_query_job(InstanceId, {?MODULE, execute, [Query, Opts]}, State);
         _ ->
@@ -365,7 +365,7 @@ do_batch_insert(Conn, Tokens, BatchReqs, Opts, TraceRenderedCTX) ->
 aggregate_query(BatchTks, BatchReqs, Acc) ->
     lists:foldl(
         fun({_, Data}, InAcc) ->
-            InsertPart = emqx_placeholder:proc_tmpl(BatchTks, Data),
+            InsertPart = emqx_placeholder:proc_nullable_tmpl(BatchTks, Data),
             <<InAcc/binary, " ", InsertPart/binary>>
         end,
         Acc,

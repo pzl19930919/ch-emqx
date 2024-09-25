@@ -253,7 +253,7 @@ do_query(
                 ecpool:pick_and_do(
                     PoolName,
                     {emqx_bridge_dynamo_connector_client, query, [
-                        Table, QueryTuple, Templates, TraceRenderedCTX
+                        Table, QueryTuple, Templates, TraceRenderedCTX, ChannelState
                     ]},
                     no_handover
                 );

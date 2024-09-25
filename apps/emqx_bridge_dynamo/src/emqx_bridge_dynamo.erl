@@ -173,7 +173,8 @@ fields(action_parameters) ->
                 mk(
                     binary(),
                     #{desc => ?DESC("range_key"), required => false}
-                )}
+                )},
+            emqx_bridge_v2_schema:undefined_as_null_field()
         ] ++ emqx_bridge_dynamo_connector:fields(config),
     lists:foldl(
         fun(Key, Acc) ->

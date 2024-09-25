@@ -20,6 +20,8 @@
 -export([
     preproc_tmpl/1,
     preproc_tmpl/2,
+    proc_nullable_tmpl/2,
+    proc_nullable_tmpl/3,
     proc_tmpl/2,
     proc_tmpl/3,
     preproc_cmd/1,
@@ -35,8 +37,8 @@
     preproc_tmpl_deep/2,
     proc_tmpl_deep/2,
     proc_tmpl_deep/3,
-
     bin/1,
+    nullable_bin/1,
     sql_data/1,
     lookup_var/2
 ]).
@@ -110,6 +112,18 @@ preproc_tmpl(Str, Opts) ->
     RE = preproc_var_re(Opts),
     Tokens = re:split(Str, RE, [{return, binary}, group, trim]),
     do_preproc_tmpl(Opts, Tokens, []).
+
+proc_nullable_tmpl(Tokens, Data) ->
+    proc_nullable_tmpl(Tokens, Data, fun nullable_bin/1).
+
+proc_nullable_tmpl(Tokens, Data, NullableTrans) ->
+    Path = [emqx_rule_engine_schema:namespace(), db_actions_undefined_vars_as_null],
+    Opts =
+        case emqx:get_config(Path, false) of
+            false -> #{return => full_binary};
+            true -> #{return => full_binary, var_trans => NullableTrans}
+        end,
+    proc_tmpl(Tokens, Data, Opts).
 
 -spec proc_tmpl(tmpl_token(), map()) -> binary().
 proc_tmpl(Tokens, Data) ->
@@ -237,6 +251,10 @@ proc_tmpl_deep({tmpl, Tokens}, Data, Opts) ->
     proc_tmpl(Tokens, Data, Opts);
 proc_tmpl_deep({tuple, Elements}, Data, Opts) ->
     list_to_tuple([proc_tmpl_deep(El, Data, Opts) || El <- Elements]).
+
+nullable_bin(undefined) -> <<"null">>;
+nullable_bin(null) -> <<"null">>;
+nullable_bin(Var) -> bin(Var).
 
 -spec sql_data(term()) -> term().
 sql_data(undefined) -> null;
