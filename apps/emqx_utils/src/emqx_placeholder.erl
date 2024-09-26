@@ -21,7 +21,6 @@
     preproc_tmpl/1,
     preproc_tmpl/2,
     proc_nullable_tmpl/2,
-    proc_nullable_tmpl/3,
     proc_tmpl/2,
     proc_tmpl/3,
     preproc_cmd/1,
@@ -118,15 +117,7 @@ preproc_tmpl(Str, Opts) ->
     do_preproc_tmpl(Opts, Tokens, []).
 
 proc_nullable_tmpl(Tokens, Data) ->
-    proc_nullable_tmpl(Tokens, Data, fun nullable_bin/1).
-
-proc_nullable_tmpl(Tokens, Data, NullableTrans) ->
-    Path = [emqx_rule_engine_schema:namespace(), db_actions_undefined_vars_as_null],
-    Opts =
-        case emqx:get_config(Path, false) of
-            false -> #{return => full_binary};
-            true -> #{return => full_binary, var_trans => NullableTrans}
-        end,
+    Opts = #{return => full_binary, var_trans => fun nullable_bin/1},
     proc_tmpl(Tokens, Data, Opts).
 
 -spec proc_tmpl(tmpl_token(), map()) -> binary().

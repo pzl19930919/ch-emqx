@@ -898,14 +898,13 @@ redis_field_value(V) when erlang:is_boolean(V) ->
     atom_to_binary(V).
 
 join_to_sql_values_string(List) ->
-    Opts = #{undefined => null},
     QuotedList =
         [
             case is_list(Item) of
                 true ->
-                    emqx_placeholder:quote_sql(emqx_utils_json:encode(Item), Opts);
+                    emqx_placeholder:quote_sql2(emqx_utils_json:encode(Item));
                 false ->
-                    emqx_placeholder:quote_sql(Item, Opts)
+                    emqx_placeholder:quote_sql2(Item)
             end
          || Item <- List
         ],
