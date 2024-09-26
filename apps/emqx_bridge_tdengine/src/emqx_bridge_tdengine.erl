@@ -131,7 +131,8 @@ fields(action_parameters) ->
                     default => ?DEFAULT_SQL,
                     format => <<"sql">>
                 }
-            )}
+            )},
+        emqx_bridge_v2_schema:undefined_as_null_field()
     ];
 fields("post_bridge_v2") ->
     emqx_bridge_schema:type_and_name_fields(enum([tdengine])) ++ fields(action_config);

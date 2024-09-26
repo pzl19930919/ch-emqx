@@ -35,7 +35,7 @@
 
 -export([connector_examples/1]).
 
--export([connect/1, do_get_status/1, execute/3, do_batch_insert/5]).
+-export([connect/1, do_get_status/1, execute/3, do_batch_insert/6]).
 
 -import(hoconsc, [mk/2, enum/1, ref/2]).
 
@@ -188,8 +188,8 @@ on_stop(InstanceId, _State) ->
 
 on_query(InstanceId, {ChannelId, Data}, #{channels := Channels} = State) ->
     case maps:find(ChannelId, Channels) of
-        {ok, #{insert := Tokens, opts := Opts}} ->
-            Query = emqx_placeholder:proc_nullable_tmpl(Tokens, Data),
+        {ok, #{insert := Tokens, opts := Opts} = ChannelState} ->
+            Query = proc_nullable_tmpl(Tokens, Data, ChannelState),
             emqx_trace:rendered_action_template(ChannelId, #{query => Query}),
             do_query_job(InstanceId, {?MODULE, execute, [Query, Opts]}, State);
         _ ->
@@ -203,11 +203,11 @@ on_batch_query(
     #{channels := Channels} = State
 ) ->
     case maps:find(ChannelId, Channels) of
-        {ok, #{batch := Tokens, opts := Opts}} ->
+        {ok, #{batch := Tokens, opts := Opts} = ChannelState} ->
             TraceRenderedCTX = emqx_trace:make_rendered_action_template_trace_context(ChannelId),
             do_query_job(
                 InstanceId,
-                {?MODULE, do_batch_insert, [Tokens, BatchReq, Opts, TraceRenderedCTX]},
+                {?MODULE, do_batch_insert, [Tokens, BatchReq, Opts, TraceRenderedCTX, ChannelState]},
                 State
             );
         _ ->
@@ -349,8 +349,8 @@ do_query_job(InstanceId, Job, #{pool_name := PoolName} = State) ->
 execute(Conn, Query, Opts) ->
     tdengine:insert(Conn, Query, Opts).
 
-do_batch_insert(Conn, Tokens, BatchReqs, Opts, TraceRenderedCTX) ->
-    SQL = aggregate_query(Tokens, BatchReqs, <<"INSERT INTO">>),
+do_batch_insert(Conn, Tokens, BatchReqs, Opts, TraceRenderedCTX, ChannelState) ->
+    SQL = aggregate_query(Tokens, BatchReqs, <<"INSERT INTO">>, ChannelState),
     try
         emqx_trace:rendered_action_template_with_ctx(
             TraceRenderedCTX,
@@ -362,15 +362,20 @@ do_batch_insert(Conn, Tokens, BatchReqs, Opts, TraceRenderedCTX) ->
             {error, Reason}
     end.
 
-aggregate_query(BatchTks, BatchReqs, Acc) ->
+aggregate_query(BatchTks, BatchReqs, Acc, ChannelState) ->
     lists:foldl(
         fun({_, Data}, InAcc) ->
-            InsertPart = emqx_placeholder:proc_nullable_tmpl(BatchTks, Data),
+            InsertPart = proc_nullable_tmpl(BatchTks, Data, ChannelState),
             <<InAcc/binary, " ", InsertPart/binary>>
         end,
         Acc,
         BatchReqs
     ).
+
+proc_nullable_tmpl(Template, Data, #{undefined_vars_as_null := true}) ->
+    emqx_placeholder:proc_nullable_tmpl(Template, Data);
+proc_nullable_tmpl(Template, Data, _) ->
+    emqx_placeholder:proc_tmpl(Template, Data).
 
 connect(Opts) ->
     %% TODO: teach `tdengine` to accept 0-arity closures as passwords.
