@@ -194,7 +194,8 @@ fields(action_parameters) ->
             mk(
                 emqx_schema:template(),
                 #{desc => ?DESC("sql_template"), default => ?DEFAULT_SQL, format => <<"sql">>}
-            )}
+            )},
+        emqx_bridge_v2_schema:undefined_as_null_field()
     ];
 fields("creation_opts") ->
     emqx_resource_schema:fields("creation_opts");

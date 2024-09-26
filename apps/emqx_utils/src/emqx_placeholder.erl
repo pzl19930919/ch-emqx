@@ -31,6 +31,7 @@
     preproc_sql/2,
     proc_sql/2,
     proc_sql_param_str/2,
+    proc_sql_param_str2/2,
     proc_cql_param_str/2,
     proc_param_str/3,
     preproc_tmpl_deep/1,
@@ -45,8 +46,11 @@
 
 -export([
     quote_sql/1,
+    quote_sql2/1,
     quote_cql/1,
-    quote_mysql/1
+    quote_cql2/1,
+    quote_mysql/1,
+    quote_mysql2/1
 ]).
 
 -export_type([tmpl_token/0]).
@@ -196,6 +200,10 @@ proc_sql_param_str(Tokens, Data) ->
     % https://www.postgresql.org/docs/14/sql-syntax-lexical.html#SQL-SYNTAX-CONSTANTS
     proc_param_str(Tokens, Data, fun quote_sql/1).
 
+-spec proc_sql_param_str2(tmpl_token(), map()) -> binary().
+proc_sql_param_str2(Tokens, Data) ->
+    proc_param_str(Tokens, Data, fun quote_sql2/1).
+
 -spec proc_cql_param_str(tmpl_token(), map()) -> binary().
 proc_cql_param_str(Tokens, Data) ->
     proc_param_str(Tokens, Data, fun quote_cql/1).
@@ -270,15 +278,27 @@ bin(Val) -> emqx_utils_conv:bin(Val).
 
 -spec quote_sql(_Value) -> iolist().
 quote_sql(Str) ->
-    emqx_utils_sql:to_sql_string(Str, emqx_utils_sql:sqlstr_opts(#{escaping => sql})).
+    emqx_utils_sql:to_sql_string(Str, #{escaping => sql, undefined => <<"undefined">>}).
+
+-spec quote_sql2(_Value) -> iolist().
+quote_sql2(Str) ->
+    emqx_utils_sql:to_sql_string(Str, #{escaping => sql}).
 
 -spec quote_cql(_Value) -> iolist().
 quote_cql(Str) ->
-    emqx_utils_sql:to_sql_string(Str, emqx_utils_sql:sqlstr_opts(#{escaping => cql})).
+    emqx_utils_sql:to_sql_string(Str, #{escaping => cql, undefined => <<"undefined">>}).
+
+-spec quote_cql2(_Value) -> iolist().
+quote_cql2(Str) ->
+    emqx_utils_sql:to_sql_string(Str, #{escaping => cql}).
 
 -spec quote_mysql(_Value) -> iolist().
 quote_mysql(Str) ->
-    emqx_utils_sql:to_sql_string(Str, emqx_utils_sql:sqlstr_opts(#{escaping => mysql})).
+    emqx_utils_sql:to_sql_string(Str, #{escaping => mysql, undefined => <<"undefined">>}).
+
+-spec quote_mysql2(_Value) -> iolist().
+quote_mysql2(Str) ->
+    emqx_utils_sql:to_sql_string(Str, #{escaping => mysql}).
 
 lookup_var(Var, Value) when Var == ?PH_VAR_THIS orelse Var == [] ->
     Value;
