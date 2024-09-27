@@ -294,8 +294,10 @@ on_stop(InstanceID, _State) ->
 %% channel related emqx_resouce callbacks
 %% -------------------------------------------------------------------
 on_add_channel(_InstId, #{channels := Channs} = OldState, ChannId, ChannConf0) ->
-    #{parameters := ParamConf} = ChannConf0,
-    NewChanns = Channs#{ChannId => #{templates => prepare_sql_templates(ParamConf)}},
+    #{parameters := ChannelConf} = ChannConf0,
+    NewChanns = Channs#{
+        ChannId => #{templates => prepare_sql_templates(ChannelConf), channel_conf => ChannelConf}
+    },
     {ok, OldState#{channels => NewChanns}}.
 
 on_remove_channel(_InstanceId, #{channels := Channels} = State, ChannId) ->
@@ -389,7 +391,9 @@ on_query(
     SimplifiedRequestType = query_type(RequestType),
     ChannelState = get_channel_state(RequestType, State),
     Templates = get_templates(RequestType, State),
-    SQL = get_sql(SimplifiedRequestType, Templates, DataOrSQL, ChannelState),
+    SQL = get_sql(
+        SimplifiedRequestType, Templates, DataOrSQL, maps:get(channel_conf, ChannelState, #{})
+    ),
     ClickhouseResult = execute_sql_in_clickhouse_server(RequestType, PoolName, SQL),
     transform_and_log_clickhouse_result(ClickhouseResult, ResourceID, SQL).
 
@@ -404,8 +408,8 @@ get_channel_state(ChannId, State) ->
             #{}
     end.
 
-get_sql(channel_message, #{send_message_template := PreparedSQL}, Data, ChannelState) ->
-    proc_nullable_tmpl(PreparedSQL, Data, ChannelState);
+get_sql(channel_message, #{send_message_template := PreparedSQL}, Data, ChannelConf) ->
+    proc_nullable_tmpl(PreparedSQL, Data, ChannelConf);
 get_sql(_, _, SQL, _) ->
     SQL.
 
@@ -431,7 +435,7 @@ on_batch_query(ResourceID, BatchReq, #{pool_name := PoolName} = State) ->
     Templates = get_templates(ChannId, State),
     ChannelState = get_channel_state(ChannId, State),
     %% Create batch insert SQL statement
-    SQL = objects_to_sql(ObjectsToInsert, Templates, ChannelState),
+    SQL = objects_to_sql(ObjectsToInsert, Templates, maps:get(channel_conf, ChannelState, #{})),
     %% Do the actual query in the database
     ResultFromClickhouse = execute_sql_in_clickhouse_server(ChannId, PoolName, SQL),
     %% Transform the result to a better format
@@ -453,13 +457,13 @@ objects_to_sql(
         send_message_template := InsertTemplate,
         extend_send_message_template := BulkExtendInsertTemplate
     },
-    ChannelState
+    ChannelConf
 ) ->
     %% Prepare INSERT-statement and the first row after VALUES
-    InsertStatementHead = proc_nullable_tmpl(InsertTemplate, FirstObject, ChannelState),
+    InsertStatementHead = proc_nullable_tmpl(InsertTemplate, FirstObject, ChannelConf),
     FormatObjectDataFunction =
         fun(Object) ->
-            proc_nullable_tmpl(BulkExtendInsertTemplate, Object, ChannelState)
+            proc_nullable_tmpl(BulkExtendInsertTemplate, Object, ChannelConf)
         end,
     InsertStatementTail = lists:map(FormatObjectDataFunction, RemainingObjects),
     CompleteStatement = erlang:iolist_to_binary([InsertStatementHead, InsertStatementTail]),

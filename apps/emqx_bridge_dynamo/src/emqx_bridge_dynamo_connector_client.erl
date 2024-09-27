@@ -186,7 +186,11 @@ convert_to_item(MsgBin, ChannelState) when is_binary(MsgBin) ->
 convert_to_item(Item, _) ->
     erlang:throw({invalid_item, Item}).
 
-val_to_bin(<<"undefined">>, #{undefined_vars_as_null := true}) ->
+val_to_bin(Null, #{undefined_vars_as_null := true}) when
+    Null =:= <<"undefined">>;
+    Null =:= <<"null">>;
+    Null =:= null
+->
     {null, true};
 val_to_bin(Val, _) ->
     to_bin(Val).
