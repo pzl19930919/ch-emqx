@@ -171,7 +171,8 @@ fields("config") ->
                     default => #{},
                     desc => ?DESC(emqx_resource_schema, <<"resource_opts">>)
                 }
-            )}
+            )},
+        emqx_bridge_v2_schema:undefined_as_null_field()
     ] ++ driver_fields() ++
         (emqx_bridge_sqlserver_connector:fields(config) --
             emqx_connector_schema_lib:prepare_statement_fields());
