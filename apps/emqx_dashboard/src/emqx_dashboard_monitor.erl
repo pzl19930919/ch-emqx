@@ -23,7 +23,7 @@
 
 -behaviour(gen_server).
 
--export([create_tables/0]).
+-export([create_tables/0, clear_table/0]).
 -export([start_link/0]).
 
 -export([
@@ -76,6 +76,9 @@ create_tables() ->
         {attributes, record_info(fields, emqx_monit)}
     ]),
     [?TAB].
+
+clear_table() ->
+    mria:clear_table(?TAB).
 
 %% -------------------------------------------------------------------------------------------------
 %% API
@@ -133,7 +136,7 @@ current_rate(Node) when Node == node() ->
             {ok, maps:merge(maps:from_list(Rate0), non_rate_value())}
     end;
 current_rate(Node) ->
-    case emqx_dashboard_proto_v1:current_rate(Node) of
+    case emqx_dashboard_proto_v2:current_rate(Node) of
         {badrpc, Reason} ->
             {badrpc, {Node, Reason}};
         {ok, Rate} ->
@@ -224,7 +227,7 @@ do_sample(Node, Time) when Node == node() ->
     MS = match_spec(Time),
     internal_format(ets:select(?TAB, MS));
 do_sample(Node, Time) ->
-    case emqx_dashboard_proto_v1:do_sample(Node, Time) of
+    case emqx_dashboard_proto_v2:do_sample(Node, Time) of
         {badrpc, Reason} ->
             {badrpc, {Node, Reason}};
         Res ->
